@@ -100,6 +100,8 @@ class UNetExperiment:
             data = batch["image"].to(self.device).unsqueeze(1).float()
             target = batch["seg"].to(self.device).unsqueeze(1).long()
 
+            # Remove singleton depth dimension [B, 1, 1, 64, 64] → [B, 1, 64, 64]
+            data = data.squeeze(2)
             prediction = self.model(data)
 
             # We are also getting softmax'd version of prediction to output a probability map
