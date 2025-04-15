@@ -7,7 +7,6 @@ import numpy as np
 from networks.RecursiveUNet import UNet
 from utils.utils import med_reshape
 
-
 class UNetInferenceAgent:
     """
     Stores model and parameters and some methods to handle inferencing
@@ -21,19 +20,12 @@ class UNetInferenceAgent:
             self.model.load_state_dict(torch.load(parameter_file_path, map_location=self.device))
 
         self.model.to(self.device)
+        self.model.eval()
 
     def single_volume_inference_unpadded(self, volume):
         """
-        Runs inference on a single volume of arbitrary patch size,
-        padding it to the conformant size first
-
-        Arguments:
-            volume {Numpy array} -- 3D array representing the volume
-
-        Returns:
-            3D NumPy array with prediction mask
+        Pads a volume to patch size, runs inference, then crops prediction to original size.
         """
-        # Pad coronal (Y) and sagittal (Z) dimensions to match patch size
         conformant_shape = (volume.shape[0], self.patch_size, self.patch_size)
         volume_padded = med_reshape(volume, new_shape=conformant_shape)
 
@@ -45,24 +37,30 @@ class UNetInferenceAgent:
 
     def single_volume_inference(self, volume):
         """
-        Runs inference on a single volume of conformant patch size
+        Runs inference on a single 3D volume of conformant patch size
 
         Arguments:
-            volume {Numpy array} -- 3D array representing the volume
+            volume {Numpy array} -- 3D array [slices, height, width]
 
         Returns:
-            3D NumPy array with prediction mask
+            3D NumPy array with predicted segmentation masks
         """
-        self.model.eval()
-        slices = []
+        slices = np.zeros(volume.shape, dtype=np.uint8)
 
         with torch.no_grad():
-            for i in range(volume.shape[0]):
-                slice_i = volume[i, :, :]  # axial slice
-                slice_i = slice_i[None, None, :, :]  # [1, 1, H, W]
-                slice_tensor = torch.from_numpy(slice_i).float().to(self.device)
-                pred = self.model(slice_tensor)  # [1, num_classes, H, W]
-                pred_class = torch.argmax(pred, dim=1).cpu().numpy()  # [1, H, W]
-                slices.append(pred_class[0])
+            for ix in range(volume.shape[0]):
+                # Normalize individual slice to [0, 1]
+                slc = volume[ix, :, :].astype(np.float32)
+                slc = slc / np.max(slc) if np.max(slc) > 0 else slc
 
-        return np.array(slices)
+                # Prepare tensor shape: [1, 1, H, W]
+                slc_tensor = torch.from_numpy(slc).unsqueeze(0).unsqueeze(0).to(self.device)
+
+                # Forward pass
+                pred = self.model(slc_tensor)  # [1, num_classes, H, W]
+                pred_class = torch.argmax(pred, dim=1).cpu().numpy()  # [1, H, W]
+
+                # Store result
+                slices[ix, :, :] = pred_class[0]
+
+        return slices
