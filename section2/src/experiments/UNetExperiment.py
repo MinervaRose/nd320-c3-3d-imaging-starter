@@ -89,91 +89,73 @@ class UNetExperiment:
     print(f"Training epoch {self.epoch}...")
     self.model.train()
 
-    # Loop over our minibatches
     for i, batch in enumerate(self.train_loader):
         self.optimizer.zero_grad()
 
-        # Get batch data and labels
-        data = batch["image"].to(self.device).unsqueeze(1).float()
-        target = batch["seg"].to(self.device).unsqueeze(1).long()
+        data = batch["image"].to(self.device, dtype=torch.float32)  # shape: [B, 1, 64, 64]
+        target = batch["seg"].to(self.device, dtype=torch.long)     # shape: [B, 1, 64, 64]
 
-        # ------------------------------
-        # 🔧 Fix input shape
-        # From shape: [B, S, 1, 64, 64]
-        # To shape:   [B*S, 1, 64, 64]
-        # ------------------------------
-        B, S, C, H, W = data.shape
-        data = data.view(B * S, C, H, W)
-        target = target.view(B * S, H, W)
-
-        # Forward pass
-        prediction = self.model(data)
+        prediction = self.model(data)  # shape: [B, 3, 64, 64]
         prediction_softmax = F.softmax(prediction, dim=1)
 
-        # Compute loss
-        loss = self.loss_function(prediction, target)
+        loss = self.loss_function(prediction, target[:, 0, :, :])  # target squeezed to [B, 64, 64]
 
         loss.backward()
         self.optimizer.step()
 
         if (i % 10) == 0:
             print(f"\nEpoch: {self.epoch} Train loss: {loss}, {100*(i+1)/len(self.train_loader):.1f}% complete")
-            counter = 100*self.epoch + 100*(i/len(self.train_loader))
-
+            counter = 100 * self.epoch + 100 * (i / len(self.train_loader))
             log_to_tensorboard(
                 self.tensorboard_train_writer,
                 loss,
                 data,
-                target.unsqueeze(1),  # add channel dim for display
+                target,
                 prediction_softmax,
                 prediction,
-                counter)
-
+                counter
+            )
         print(".", end='')
 
     print("\nTraining complete")
 
     def validate(self):
-        """
-        This method runs validation cycle, using same metrics as 
-        Train method. Note that model needs to be switched to eval
-        mode and no_grad needs to be called so that gradients do not 
-        propagate
-        """
-        print(f"Validating epoch {self.epoch}...")
+    """
+    This method runs validation cycle, using same metrics as 
+    Train method. Note that model needs to be switched to eval
+    mode and no_grad needs to be called so that gradients do not 
+    propagate
+    """
+    print(f"Validating epoch {self.epoch}...")
 
-        # Turn off gradient accumulation by switching model to "eval" mode
-        self.model.eval()
-        loss_list = []
+    self.model.eval()
+    loss_list = []
 
-        with torch.no_grad():
-            for i, batch in enumerate(self.val_loader):
-                
-                # TASK: Write validation code that will compute loss on a validation sample
-                data = batch["image"].to(self.device).unsqueeze(1).float()
-                target = batch["seg"].to(self.device).unsqueeze(1).long()
+    with torch.no_grad():
+        for i, batch in enumerate(self.val_loader):
+            data = batch["image"].to(self.device, dtype=torch.float32)  # shape: [B, 1, 64, 64]
+            target = batch["seg"].to(self.device, dtype=torch.long)     # shape: [B, 1, 64, 64]
 
-                prediction = self.model(data)
-                prediction_softmax = F.softmax(prediction, dim=1)
-                loss = self.loss_function(prediction, target[:, 0, :, :])
+            prediction = self.model(data)
+            prediction_softmax = F.softmax(prediction, dim=1)
 
+            loss = self.loss_function(prediction, target[:, 0, :, :])  # target squeezed to [B, 64, 64]
 
-                print(f"Batch {i}. Data shape {data.shape} Loss {loss}")
+            print(f"Batch {i}. Data shape {data.shape} Loss {loss.item()}")
+            loss_list.append(loss.item())
 
-                # We report loss that is accumulated across all of validation set
-                loss_list.append(loss.item())
+    self.scheduler.step(np.mean(loss_list))
 
-        self.scheduler.step(np.mean(loss_list))
-
-        log_to_tensorboard(
-            self.tensorboard_val_writer,
-            np.mean(loss_list),
-            data,
-            target,
-            prediction_softmax, 
-            prediction,
-            (self.epoch+1) * 100)
-        print(f"Validation complete")
+    log_to_tensorboard(
+        self.tensorboard_val_writer,
+        np.mean(loss_list),
+        data,
+        target,
+        prediction_softmax, 
+        prediction,
+        (self.epoch + 1) * 100
+    )
+    print("Validation complete")
 
     def save_model_parameters(self):
         """
