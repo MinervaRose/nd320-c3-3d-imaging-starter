@@ -59,6 +59,7 @@ def LoadHippocampusData(root_dir, y_shape, z_shape):
         # ANSWER: 
         # Because segmentation labels are categorical values (classes 0, 1, 2),
         # and loss functions like CrossEntropyLoss expect integer class indices.
+        # Furthermore integer input is required by Dice and Jaccard calculations.
 
         out.append({"image": image, "seg": label, "filename": f})
 
