@@ -82,61 +82,56 @@ class UNetExperiment:
         self.tensorboard_val_writer = SummaryWriter(comment="_val")
 
     def train(self):
-        """
-        This method is executed once per epoch and takes 
-        care of model weight update cycle
-        """
-        print(f"Training epoch {self.epoch}...")
-        self.model.train()
+    """
+    This method is executed once per epoch and takes 
+    care of model weight update cycle
+    """
+    print(f"Training epoch {self.epoch}...")
+    self.model.train()
 
-        # Loop over our minibatches
-        for i, batch in enumerate(self.train_loader):
-            self.optimizer.zero_grad()
+    # Loop over our minibatches
+    for i, batch in enumerate(self.train_loader):
+        self.optimizer.zero_grad()
 
-            # TASK: You have your data in batch variable. Put the slices as 4D Torch Tensors of 
-            # shape [BATCH_SIZE, 1, PATCH_SIZE, PATCH_SIZE] into variables data and target. 
-            # Feed data to the model and feed target to the loss function
-            # 
-            data = batch["image"].to(self.device).unsqueeze(1).float()
-            target = batch["seg"].to(self.device).unsqueeze(1).long()
+        # Get batch data and labels
+        data = batch["image"].to(self.device).unsqueeze(1).float()
+        target = batch["seg"].to(self.device).unsqueeze(1).long()
 
-            # Remove singleton depth dimension [B, 1, 1, 64, 64] → [B, 1, 64, 64]
-            data = data.squeeze(2)
-            prediction = self.model(data)
+        # ------------------------------
+        # 🔧 Fix input shape
+        # From shape: [B, S, 1, 64, 64]
+        # To shape:   [B*S, 1, 64, 64]
+        # ------------------------------
+        B, S, C, H, W = data.shape
+        data = data.view(B * S, C, H, W)
+        target = target.view(B * S, H, W)
 
-            # We are also getting softmax'd version of prediction to output a probability map
-            # so that we can see how the model converges to the solution
-            prediction_softmax = F.softmax(prediction, dim=1)
+        # Forward pass
+        prediction = self.model(data)
+        prediction_softmax = F.softmax(prediction, dim=1)
 
-            loss = self.loss_function(prediction, target[:, 0, :, :])
+        # Compute loss
+        loss = self.loss_function(prediction, target)
 
-            # TASK: What does each dimension of variable prediction represent?
-            # ANSWER: [Batch size, Number of classes (3), Height, Width]
+        loss.backward()
+        self.optimizer.step()
 
-            loss.backward()
-            self.optimizer.step()
+        if (i % 10) == 0:
+            print(f"\nEpoch: {self.epoch} Train loss: {loss}, {100*(i+1)/len(self.train_loader):.1f}% complete")
+            counter = 100*self.epoch + 100*(i/len(self.train_loader))
 
-            if (i % 10) == 0:
-                # Output to console on every 10th batch
-                print(f"\nEpoch: {self.epoch} Train loss: {loss}, {100*(i+1)/len(self.train_loader):.1f}% complete")
+            log_to_tensorboard(
+                self.tensorboard_train_writer,
+                loss,
+                data,
+                target.unsqueeze(1),  # add channel dim for display
+                prediction_softmax,
+                prediction,
+                counter)
 
-                counter = 100*self.epoch + 100*(i/len(self.train_loader))
+        print(".", end='')
 
-                # You don't need to do anything with this function, but you are welcome to 
-                # check it out if you want to see how images are logged to Tensorboard
-                # or if you want to output additional debug data
-                log_to_tensorboard(
-                    self.tensorboard_train_writer,
-                    loss,
-                    data,
-                    target,
-                    prediction_softmax,
-                    prediction,
-                    counter)
-
-            print(".", end='')
-
-        print("\nTraining complete")
+    print("\nTraining complete")
 
     def validate(self):
         """
