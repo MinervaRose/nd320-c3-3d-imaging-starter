@@ -5,26 +5,22 @@ import torch
 import numpy as np
 
 from networks.RecursiveUNet import UNet
-
 from utils.utils import med_reshape
+
 
 class UNetInferenceAgent:
     """
     Stores model and parameters and some methods to handle inferencing
     """
     def __init__(self, parameter_file_path='', model=None, device="cpu", patch_size=64):
-
-        self.model = model
+        self.model = model if model is not None else UNet(num_classes=3)
         self.patch_size = patch_size
         self.device = device
-
-        if model is None:
-            self.model = UNet(num_classes=3)
 
         if parameter_file_path:
             self.model.load_state_dict(torch.load(parameter_file_path, map_location=self.device))
 
-        self.model.to(device)
+        self.model.to(self.device)
 
     def single_volume_inference_unpadded(self, volume):
         """
@@ -37,8 +33,15 @@ class UNetInferenceAgent:
         Returns:
             3D NumPy array with prediction mask
         """
-        
-        raise NotImplementedError
+        # Pad coronal (Y) and sagittal (Z) dimensions to match patch size
+        conformant_shape = (volume.shape[0], self.patch_size, self.patch_size)
+        volume_padded = med_reshape(volume, new_shape=conformant_shape)
+
+        prediction = self.single_volume_inference(volume_padded)
+
+        # Crop prediction back to original size
+        prediction_cropped = prediction[:, :volume.shape[1], :volume.shape[2]]
+        return prediction_cropped
 
     def single_volume_inference(self, volume):
         """
@@ -51,14 +54,15 @@ class UNetInferenceAgent:
             3D NumPy array with prediction mask
         """
         self.model.eval()
-
-        # Assuming volume is a numpy array of shape [X,Y,Z] and we need to slice X axis
         slices = []
 
-        # TASK: Write code that will create mask for each slice across the X (0th) dimension. After 
-        # that, put all slices into a 3D Numpy array. You can verify if your method is 
-        # correct by running it on one of the volumes in your training set and comparing 
-        # with the label in 3D Slicer.
-        # <YOUR CODE HERE>
+        with torch.no_grad():
+            for i in range(volume.shape[0]):
+                slice_i = volume[i, :, :]  # axial slice
+                slice_i = slice_i[None, None, :, :]  # [1, 1, H, W]
+                slice_tensor = torch.from_numpy(slice_i).float().to(self.device)
+                pred = self.model(slice_tensor)  # [1, num_classes, H, W]
+                pred_class = torch.argmax(pred, dim=1).cpu().numpy()  # [1, H, W]
+                slices.append(pred_class[0])
 
-        return # 
+        return np.array(slices)
