@@ -96,6 +96,12 @@ def med_reshape(image, new_shape):
     reshaped_image = np.zeros(new_shape)
 
     # TASK: write your original image into the reshaped image
-    # <CODE GOES HERE>
+    # Compute the min size between old and new in each dimension
+    min_x = min(image.shape[0], new_shape[0])
+    min_y = min(image.shape[1], new_shape[1])
+    min_z = min(image.shape[2], new_shape[2])
+
+    # Copy the original content into the reshaped volume (top-left corner)
+    reshaped_image[:min_x, :min_y, :min_z] = image[:min_x, :min_y, :min_z]
 
     return reshaped_image
