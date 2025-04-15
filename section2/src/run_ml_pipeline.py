@@ -11,7 +11,7 @@ from data_prep.HippocampusDatasetLoader import LoadHippocampusData
 class Config:
     def __init__(self):
         self.name = "Basic_unet"
-        self.root_dir = "section2/out"  # This is where images/labels live
+        self.root_dir = "section1/out"  # This is where images/labels live
         self.n_epochs = 10
         self.learning_rate = 0.0002
         self.batch_size = 8
