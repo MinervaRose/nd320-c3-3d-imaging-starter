@@ -39,7 +39,10 @@ def LoadHippocampusData(root_dir, y_shape, z_shape):
         label, _ = load(os.path.join(label_dir, f))
 
         # TASK: normalize all images (but not labels) so that values are in [0..1] range
-        # <YOUR CODE GOES HERE>
+        # ✅ Normalize image (labels should remain discrete class values)
+        image = image.astype(np.float32)
+        image = (image - np.min(image)) / (np.max(image) - np.min(image))
+
 
         # We need to reshape data since CNN tensors that represent minibatches
         # in our case will be stacks of slices and stacks need to be of the same size.
@@ -54,9 +57,12 @@ def LoadHippocampusData(root_dir, y_shape, z_shape):
 
         # TASK: Why do we need to cast label to int?
         # ANSWER: 
+        # Because segmentation labels are categorical values (classes 0, 1, 2),
+        # and loss functions like CrossEntropyLoss expect integer class indices.
 
         out.append({"image": image, "seg": label, "filename": f})
 
     # Hippocampus dataset only takes about 300 Mb RAM, so we can afford to keep it all in RAM
     print(f"Processed {len(out)} files, total {sum([x['image'].shape[0] for x in out])} slices")
     return np.array(out)
+
