@@ -47,7 +47,14 @@ class SlicesDataset(Dataset):
         # and the slice number are in the slc variable. 
         # Hint2: You can use None notation like so: arr[None, :] to add size-1 
         # dimension to a Numpy array
-        # <YOUR CODE GOES HERE>
+        # Get the corresponding image and segmentation slice
+        vol_idx, slice_idx = slc
+        image_slice = self.data[vol_idx]["image"][slice_idx]
+        label_slice = self.data[vol_idx]["seg"][slice_idx]
+
+        # Convert to Torch tensors and add channel dimension [1, W, H]
+        sample["image"] = torch.tensor(image_slice[None, :, :], dtype=torch.float32)
+        sample["seg"] = torch.tensor(label_slice[None, :, :], dtype=torch.long)
 
         return sample
 
